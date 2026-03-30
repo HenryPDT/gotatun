@@ -173,7 +173,8 @@ impl UapiClient {
                     return;
                 }
 
-                lines.clear();
+                // `wg` may wait forever for EOF if we keep the socket open.
+                return;
             }
         });
     }

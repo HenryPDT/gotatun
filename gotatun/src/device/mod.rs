@@ -153,13 +153,18 @@ pub(crate) struct Connection<T: DeviceTransports> {
 
 impl<T: DeviceTransports> Connection<T> {
     pub async fn set_up(device_arc: Arc<RwLock<DeviceState<T>>>) -> Result<(), Error> {
-        let mut device = device_arc.write().await;
-        let pool = PacketBufPool::new(MAX_PACKET_BUFS);
+        let old_conn = {
+            let mut device = device_arc.write().await;
+            device.connection.take()
+        };
 
-        // clean up existing connection
-        if let Some(conn) = device.connection.take() {
+        // clean up existing connection outside of the write lock
+        if let Some(conn) = old_conn {
             conn.stop().await;
         }
+
+        let mut device = device_arc.write().await;
+        let pool = PacketBufPool::new(MAX_PACKET_BUFS);
 
         let (udp4_tx, udp4_rx, udp6_tx, udp6_rx) = device.open_listen_socket().await?;
         let buffered_ip_rx =
@@ -254,13 +259,16 @@ impl<T: DeviceTransports> Device<T> {
     async fn stop_inner(device: Arc<RwLock<DeviceState<T>>>) {
         log::debug!("Stopping device");
 
-        let mut device = device.write().await;
+        let (api_task, connection) = {
+            let mut device_state = device.write().await;
+            (device_state.api.take(), device_state.connection.take())
+        };
 
-        if let Some(api_task) = device.api.take() {
+        if let Some(api_task) = api_task {
             api_task.stop().await;
         }
 
-        if let Some(connection) = device.connection.take() {
+        if let Some(connection) = connection {
             connection.stop().await;
         }
     }
