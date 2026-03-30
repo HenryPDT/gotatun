@@ -29,26 +29,28 @@ Follow the on-screen instructions, then restart your terminal or run `source $HO
 
 By default the executable is placed in the `./target/release` folder. You can copy it to a desired location manually, or install it using `cargo install --bin gotatun --path .`.
 
-### Cross-Compiling (From x86_64 PC to aarch64 Pi/Jetson)
+### Cross-Compiling with `cross` (Recommended for Static Binaries)
 
-Compiling Rust directly on an older Jetson or Raspberry Pi can be slow. It is recommended to build on your PC targeting `aarch64`.
+For a truly portable, standalone "build once, run anywhere" binary, it is recommended to use the [cross](https://github.com/cross-rs/cross) tool to build a static binary against `musl`.
 
-1. **Install the ARM64 standard library:**
+1. **Install `cross`:**
    ```bash
-   rustup target add aarch64-unknown-linux-gnu
+   cargo install cross --git https://github.com/cross-rs/cross
    ```
 
-2. **Install the ARM64 cross-linker (Ubuntu/Debian):**
+2. **Build a static binary for your architecture:**
+
+   **For x86_64 (Standard PC):**
    ```bash
-   sudo apt update && sudo apt install gcc-aarch64-linux-gnu
+   cross build --bin gotatun --target x86_64-unknown-linux-musl --release
    ```
 
-3. **Build for ARM64:**
+   **For aarch64 (Raspberry Pi / Jetson):**
    ```bash
-   CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc cargo build --bin gotatun --release --target aarch64-unknown-linux-gnu
+   cross build --bin gotatun --target aarch64-unknown-linux-musl --release
    ```
 
-The compiled binary will be at `./target/aarch64-unknown-linux-gnu/release/gotatun`.
+The resulting binary will be at `target/<target-triple>/release/gotatun`.
 
 ### Nix
 
