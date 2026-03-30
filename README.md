@@ -12,14 +12,43 @@ Contributions made prior to March 5, 2026 are licensed under the old BSD 3-claus
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the MPL-2.0 License, shall be licensed as above, without any additional terms or conditions.
 
+## Prerequisites (Installing Rust)
+
+To build `gotatun`, you need the Rust toolchain. On Linux or macOS, install `rustup` by running:
+
+```bash
+curl https://sh.rustup.rs -sSf | sh
+```
+
+Follow the on-screen instructions, then restart your terminal or run `source $HOME/.cargo/env`.
+
 ## Building
 
 - Library only: `cargo build --lib --no-default-features --release [--target $(TARGET_TRIPLE)]`
 - Executable: `cargo build --bin gotatun --release [--target $(TARGET_TRIPLE)]`
 
-### Installation
-
 By default the executable is placed in the `./target/release` folder. You can copy it to a desired location manually, or install it using `cargo install --bin gotatun --path .`.
+
+### Cross-Compiling (From x86_64 PC to aarch64 Pi/Jetson)
+
+Compiling Rust directly on an older Jetson or Raspberry Pi can be slow. It is recommended to build on your PC targeting `aarch64`.
+
+1. **Install the ARM64 standard library:**
+   ```bash
+   rustup target add aarch64-unknown-linux-gnu
+   ```
+
+2. **Install the ARM64 cross-linker (Ubuntu/Debian):**
+   ```bash
+   sudo apt update && sudo apt install gcc-aarch64-linux-gnu
+   ```
+
+3. **Build for ARM64:**
+   ```bash
+   CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc cargo build --bin gotatun --release --target aarch64-unknown-linux-gnu
+   ```
+
+The compiled binary will be at `./target/aarch64-unknown-linux-gnu/release/gotatun`.
 
 ### Nix
 
@@ -33,11 +62,13 @@ As per the specification, to start a tunnel use:
 
 The tunnel can then be configured using [wg](https://git.zx2c4.com/WireGuard/about/src/tools/man/wg.8), as a regular WireGuard tunnel, or any other tool.
 
-It is also possible to use with [wg-quick](https://git.zx2c4.com/WireGuard/about/src/tools/man/wg-quick.8) by setting the environment variable `WG_QUICK_USERSPACE_IMPLEMENTATION` to `gotatun`. For example:
+It is also possible to use with [wg-quick](https://git.zx2c4.com/WireGuard/about/src/tools/man/wg-quick.8) by setting environment variables:
 
-`sudo WG_QUICK_USERSPACE_IMPLEMENTATION=gotatun WG_SUDO=1 wg-quick up CONFIGURATION`
+```bash
+sudo WG_QUICK_USERSPACE_IMPLEMENTATION=gotatun WG_SUDO=1 wg-quick up <YOUR_CONFIG_NAME>
+```
 
-*Please note that `wg-quick` will ignore `WG_QUICK_USERSPACE_IMPLEMENTATION` on Linux if you have the wireguard kernel module installed.*
+*Note: `WG_SUDO=1` is required because `gotatun` drops privileges immediately upon startup and cannot normally set the `fwmark` parameter that `wg-quick` requires. Also, `wg-quick` will ignore `WG_QUICK_USERSPACE_IMPLEMENTATION` on Linux if the kernel module is already loaded.*
 
 ## Testing
 
@@ -67,9 +98,13 @@ aarch64-apple-ios             |      | ✓    |
 
 `x86-64`, and `aarch64` architectures are supported. The behaviour should be identical to that of [wireguard-go](https://git.zx2c4.com/wireguard-go/about/), with the following difference:
 
-`gotatun` will drop privileges when started. When privileges are dropped it is not possible to set `fwmark`. If `fwmark` is required, such as when using `wg-quick`, run with `--disable-drop-privileges` or set the environment variable `WG_SUDO=1`.
+`gotatun` will drop privileges when started. To allow it to create and manage network interfaces without running as root, you **must** grant it the `CAP_NET_ADMIN` capability:
 
-You will need to give the executable the `CAP_NET_ADMIN` capability using: `sudo setcap cap_net_admin+epi gotatun`. sudo is not needed.
+```bash
+sudo setcap cap_net_admin+epi /usr/local/bin/gotatun
+```
+
+*(Adjust the path if you installed it elsewhere).*
 
 ### macOS
 
