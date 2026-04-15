@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [0.5.1] - 2026-04-02
+### Fixed
+- Handle UDP `bind` failing when a randomly selected port is in use for IPv6.
+
+
 ## [0.5.0] - 2026-03-26
 ### Changed
 - Remove unused function `Tunn::active_receiving_indices`. This is semver breaking since it is

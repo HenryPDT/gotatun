@@ -1,7 +1,7 @@
 [package]
 name = "gotatun"
 description = "an implementation of the WireGuard® protocol designed for portability and speed"
-version = "0.5.0"
+version = "0.5.1"
 authors.workspace = true
 rust-version.workspace = true
 edition.workspace = true
@@ -60,7 +60,7 @@ rand_core = { workspace = true, features = ["getrandom"] }
 ring = { workspace = true }
 socket2 = { workspace = true, features = ["all"] }
 thiserror = { workspace = true, optional = true }
-tokio = { workspace = true, features = ["full"] }
+tokio = { workspace = true, features = ["sync", "rt", "time", "macros", "net"] }
 tun = { workspace = true, default-features = false, features = ["async"], optional = true }
 typed-builder = { workspace = true }
 x25519-dalek = { workspace = true, features = [
