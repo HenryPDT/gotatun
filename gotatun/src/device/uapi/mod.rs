@@ -314,7 +314,9 @@ async fn run_uapi_protocol(
             return;
         }
 
-        buf.clear();
+        // `wg` issues one command per connection and waits for EOF.
+        // Keeping the socket open for a second command hangs it.
+        return;
     }
 }
 
@@ -370,7 +372,9 @@ fn run_uapi_protocol_sync(client: UapiClient, r: impl Read, mut w: impl Write) {
             return;
         }
 
-        buf.clear();
+        // `wg` issues one command per connection and waits for EOF.
+        // Keeping the socket open for a second command hangs it.
+        return;
     }
 }
 

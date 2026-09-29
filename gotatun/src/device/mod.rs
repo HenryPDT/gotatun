@@ -165,23 +165,33 @@ pub(crate) struct Connection<T: DeviceTransports> {
 impl<T: DeviceTransports> Connection<T> {
     #[instrument(level = Level::TRACE, skip_all, ret)]
     pub async fn set_up(device_arc: Arc<RwLock<DeviceState<T>>>) -> Result<(), Error> {
-        let mut device = device_arc.write().await;
+        // Take any existing connection without holding the write lock across
+        // `stop().await`. The worker tasks (`handle_incoming/outgoing/timers`)
+        // need `read()` access to exit, so awaiting their shutdown while
+        // holding `write()` can hang (seen with `wg-quick` reconfiguration).
+        let old_conn = {
+            let mut device = device_arc.write().await;
 
-        // While suspended, no connection may be brought up: a reconfiguration
-        // (adding a peer, changing the key/port, a UAPI `set=1`, ...) must not
-        // silently resume the tunnel. The config change is still applied to
-        // `DeviceState`; [`Device::resume`] brings the connection up afterwards
-        // with the latest config.
-        if device.suspended {
-            return Ok(());
-        }
+            // While suspended, no connection may be brought up: a reconfiguration
+            // (adding a peer, changing the key/port, a UAPI `set=1`, ...) must not
+            // silently resume the tunnel. The config change is still applied to
+            // `DeviceState`; [`Device::resume`] brings the connection up afterwards
+            // with the latest config.
+            if device.suspended {
+                return Ok(());
+            }
 
-        let pool = PacketBufPool::new_lazy(MAX_PACKET_BUFS);
+            device.connection.take()
+        };
 
-        // clean up existing connection
-        if let Some(conn) = device.connection.take() {
+        // Clean up existing connection outside of the write lock.
+        if let Some(conn) = old_conn {
             conn.stop().await;
         }
+
+        let mut device = device_arc.write().await;
+
+        let pool = PacketBufPool::new_lazy(MAX_PACKET_BUFS);
 
         let (udp_tx, udp_rx) = device.open_listen_socket().await?;
         let (buffered_ip_tx, buffered_ip_rx) = crate::tun::buffer::channel(
@@ -268,13 +278,16 @@ impl<T: DeviceTransports> Device<T> {
     async fn stop_inner(device: Arc<RwLock<DeviceState<T>>>) {
         tracing::debug!("Stopping device");
 
-        let mut device = device.write().await;
+        let (api_task, connection) = {
+            let mut device = device.write().await;
+            (device.api.take(), device.connection.take())
+        };
 
-        if let Some(api_task) = device.api.take() {
+        if let Some(api_task) = api_task {
             api_task.stop().await;
         }
 
-        if let Some(connection) = device.connection.take() {
+        if let Some(connection) = connection {
             connection.stop().await;
         }
     }
@@ -295,17 +308,22 @@ impl<T: DeviceTransports> Device<T> {
     pub async fn suspend(&self) {
         tracing::debug!("Suspending device");
 
-        let mut device = self.inner.write().await;
+        let connection = {
+            let mut device = self.inner.write().await;
 
-        if device.suspended {
-            return;
-        }
+            if device.suspended {
+                return;
+            }
 
-        if let Some(connection) = device.connection.take() {
+            // Mark suspended while holding the lock so a concurrent `set_up`
+            // cannot bring a connection back up while we are tearing down.
+            device.suspended = true;
+            device.connection.take()
+        };
+
+        if let Some(connection) = connection {
             connection.stop().await;
         }
-
-        device.suspended = true;
     }
 
     /// Resume a device that was suspended with [`Device::suspend`].
